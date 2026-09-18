@@ -12,11 +12,21 @@ Vagrant.configure("2") do |config|
   end
 
   config.vm.provision "shell", inline: <<-SHELL
-    yum install httpd -y
+    yum install httpd wget unzip -y
     systemctl enable --now httpd
 
+    cd /tmp
+    rm -rf ymb-portfolio
+    mkdir ymb-portfolio
+    cd ymb-portfolio
+
+    wget https://github.com/tanishaleo/COMP-4001-YMB-Zone-B/archive/refs/heads/main.zip -O main.zip
+
+    unzip -o main.zip
+
     rm -rf /var/www/html/*
-    cp -r /vagrant/* /var/www/html/
+
+    cp -r COMP-4001-YMB-Zone-B-main/Studentportfoliotemplate-main/* /var/www/html/
 
     echo "Provisioned on: $(date)" > /var/www/html/status.txt
 
