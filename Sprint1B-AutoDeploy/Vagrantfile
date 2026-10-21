@@ -1,0 +1,85 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  config.vm.box = "eurolinux-vagrant/centos-stream-9"
+  config.vm.hostname = "Tanisha"
+
+  config.vm.network "private_network", ip: "192.168.56.58"
+  config.vm.network "forwarded_port", guest: 3000, host: 3000
+  config.vm.network "forwarded_port", guest: 5090, host: 5090
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "2048"
+    vb.cpus = 2
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    # Update system and install prerequisites
+    sudo dnf update -y
+    sudo dnf install -y yum-utils git curl
+
+    # Install Docker
+    sudo dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    sudo dnf install -y docker-ce docker-ce-cli containerd.io
+
+    # Start and enable Docker
+    sudo systemctl enable --now docker
+
+    # Add vagrant user to docker group
+    sudo usermod -aG docker vagrant
+
+    # Install Docker Compose v2
+    sudo mkdir -p /usr/local/lib/docker/cli-plugins
+    sudo curl -SL https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+    sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+    # Backward compatibility
+    sudo ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
+
+    # Clone repositories
+    git clone https://github.com/tanishaleo/COMP-4001-YMB-Zone-B.git /home/vagrant/COMP-4001-YMB-Zone-B
+    git clone https://github.com/tanishaleo/BankingApp.git /home/vagrant/BankingApp
+
+    # Create docker-compose.yml
+    cat <<EOL > /home/vagrant/docker-compose.yml
+version: '3.9'
+
+services:
+  studentportfolio:
+    build:
+      context: /home/vagrant/COMP-4001-YMB-Zone-B/Studentportfoliotemplate-main
+    ports:
+      - "3000:80"
+    networks:
+      - prfnet
+    hostname: studentportfolio
+    container_name: studentportfolio
+
+  bankingapp:
+    build:
+      context: /home/vagrant/BankingApp
+    ports:
+      - "5090:5090"
+    networks:
+      - prfnet
+    hostname: bankingapp
+    container_name: bankingapp
+
+networks:
+  prfnet:
+    driver: bridge
+EOL
+
+    # Fix permissions
+    sudo chown -R vagrant:vagrant /home/vagrant
+
+    # Start containers
+    /bin/bash -c 'newgrp docker <<EOF
+    cd /home/vagrant
+    docker compose up -d --build
+    sleep 10
+    docker exec bankingapp curl -s http://studentportfolio > /dev/null && echo "Containers can communicate!" || echo "Communication failed"
+EOF'
+  SHELL
+end
